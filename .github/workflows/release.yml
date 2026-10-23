@@ -1,0 +1,108 @@
+name: Publish verified desktop release
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful Desktop build and tests run ID
+        required: true
+        type: string
+      source_commit:
+        description: Full commit SHA used by the build and draft release
+        required: true
+        type: string
+      tag:
+        description: Existing draft release tag
+        required: true
+        default: v0.1.0
+        type: string
+permissions:
+  actions: read
+  contents: write
+concurrency:
+  group: desktop-release-${{ inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      BUILD_RUN: ${{ inputs.build_run }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Verify source build and existing draft
+        shell: bash
+        run: |
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN" > run.json
+          gh release view "$RELEASE_TAG" --json isDraft,targetCommitish > release.json
+          python3 - <<'PY'
+          import json, os, re
+          run = json.load(open('run.json'))
+          release = json.load(open('release.json'))
+          sha = os.environ['SOURCE_COMMIT']
+          assert re.fullmatch(r'[0-9a-f]{40}', sha), 'Expected full commit SHA'
+          assert run['repository']['full_name'] == os.environ['GH_REPO']
+          assert run['path'] == '.github/workflows/build.yml'
+          assert run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['head_sha'] == sha
+          assert release['isDraft'] is True, 'Only an existing draft may be published'
+          assert release['targetCommitish'] == sha, 'Draft and build source must match'
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: release-*
+          merge-multiple: true
+          path: release-assets
+      - name: Validate all platform files and create checksums
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, os, pathlib, re, zipfile
+          version = os.environ['RELEASE_TAG'].removeprefix('v')
+          assert re.fullmatch(r'\d+\.\d+\.\d+', version)
+          root = pathlib.Path('release-assets')
+          expected = {f'Claude-Ojou-Network-{version}-{target}.{ext}'
+                      for target, exts in [('mac-arm64', ['dmg', 'zip']),
+                                           ('mac-x64', ['dmg', 'zip']),
+                                           ('win-x64', ['exe', 'zip'])]
+                      for ext in exts}
+          files = {p.name for p in root.iterdir() if p.is_file()}
+          assert files == expected, f'Unexpected asset set: {files ^ expected}'
+          hashes = []
+          for name in sorted(expected):
+              path = root / name
+              assert path.stat().st_size > 1_000_000, f'Incomplete asset: {name}'
+              if path.suffix == '.zip':
+                  with zipfile.ZipFile(path) as archive:
+                      assert archive.testzip() is None, f'Corrupt ZIP: {name}'
+                      assert any(n.endswith('/app.asar') for n in archive.namelist())
+              with path.open('rb') as stream:
+                  digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+              hashes.append(f'{digest}  {name}\n')
+          (root / 'SHA256SUMS.txt').write_text(''.join(hashes), encoding='utf-8')
+          PY
+      - name: Upload to draft and verify checksums before publishing
+        shell: bash
+        run: |
+          gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          gh release view "$RELEASE_TAG" --json assets,isDraft > uploaded.json
+          python3 - <<'PY'
+          import hashlib, json, pathlib
+          root = pathlib.Path('release-assets')
+          release = json.load(open('uploaded.json'))
+          assert release['isDraft'] is True
+          remote = {a['name']: a for a in release['assets']}
+          assert set(remote) == {p.name for p in root.iterdir()}
+          for path in root.iterdir():
+              asset = remote[path.name]
+              assert asset['size'] == path.stat().st_size
+              with path.open('rb') as stream:
+                  digest = 'sha256:' + hashlib.file_digest(stream, 'sha256').hexdigest()
+              assert asset.get('digest') == digest, f'Checksum mismatch: {path.name}'
+          PY
+          gh release edit "$RELEASE_TAG" --draft=false --latest
+          gh release view "$RELEASE_TAG" --json url,isDraft,assets
