@@ -73,7 +73,7 @@ async function startWorker(){
   const config=await resolveProfile();
   const env=Object.fromEntries(['PATH','SystemRoot','WINDIR','TEMP','TMP','HOME','USERPROFILE','LANG'].filter(k=>process.env[k]).map(k=>[k,process.env[k]]));
   const child=utilityProcess.fork(path.join(root,'src','worker.js'),[],{serviceName:'Claude Ojou Network Observer',env,stdio:'pipe'});worker=child;
-  child.stderr.on('data',()=>{});child.stdout.on('data',()=>{});
+  child.stderr.on('data',buffer=>{if(demo)console.error('Demo worker:',buffer.toString());});child.stdout.on('data',()=>{});
   child.on('spawn',()=>child.postMessage({type:'init',directory,legacy:demo?'':legacy,config}));
   child.on('message',async m=>{
     if(m.type==='ready'){workerReady=true;lastError=startupWarning;publish();}

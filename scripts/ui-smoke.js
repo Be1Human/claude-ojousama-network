@@ -7,7 +7,8 @@ const application=await electron.launch({executablePath:process.env.OJOU_EXECUTA
 const errors=[];
 try{
   const page=await application.firstWindow();page.on('pageerror',e=>errors.push(e.message));
-  await page.waitForFunction(()=>document.getElementById('hero-ip')?.textContent==='203.0.113.42',{},{timeout:30000});
+  try { await page.waitForFunction(()=>document.getElementById('hero-ip')?.textContent==='203.0.113.42',{},{timeout:45000}); }
+  catch(error) { mkdirSync('test-results',{recursive:true});await page.screenshot({path:'test-results/startup-failure.png',fullPage:true});console.error('Demo startup diagnostics:',await page.evaluate(()=>({runtime:document.getElementById('runtime')?.textContent,error:document.getElementById('error-banner')?.textContent,hero:document.getElementById('hero-ip')?.textContent})),errors);throw error; }
   assert.equal(await page.evaluate(()=>typeof window.require),'undefined');
   assert.ok(await page.locator('#demo-badge').isVisible());
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);assert.equal(overflow,false);

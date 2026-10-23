@@ -1,5 +1,7 @@
 export function seedDemo(store) {
   if(store.snapshot().count)return;
+  store.db.exec('BEGIN');
+  try {
   const now=Date.now(), old=now-24*3600000;
   const location={country:'United States',countryCode:'US',region:'California',city:'Los Angeles',asn:'DEMO',isp:'演示网络 · RFC 5737',source:'演示数据',checkedAt:now};
   for(let i=0;i<144;i++) {
@@ -12,4 +14,6 @@ export function seedDemo(store) {
   for(const route of ['cli','browser'])for(const target of (route==='cli'?['api','auth']:['auth']))store.check({time:now,batch:String(now),route,target,kind:'target',ok:true,http:200,ms:126,error:'',interval:30});
   store.event('suspend','演示：休眠，未采样区间不计为掉线',old+63*600000);
   store.event('resume','演示：恢复观测',old+70*600000);
+  store.db.exec('COMMIT');
+  } catch(error) { if(store.db.isTransaction)store.db.exec('ROLLBACK');throw error; }
 }
