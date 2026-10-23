@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.runtime/
+test-results/
+playwright-report/
+*.sqlite*
+*.db
+*.csv
+*.log
+.env*
+*-profile.json
+.DS_Store

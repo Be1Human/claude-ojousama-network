@@ -1,0 +1,4 @@
+Use case: stylized-concept
+Asset type: small transparent PNG chibi sticker for an anime desktop app sidebar.
+Reference: same original orange-haired adult character shown in the supplied UI mockup, sunflower hair pin and black ribbon, white high collar dress with orange and black trim.
+Draw one adorable super-deformed chibi version of the adult woman sitting behind a tiny stack of closed books, both elbows leaning on the top book, cheek resting in one hand, mildly pouty with an affectionate tired smile, small manga puff next to cheek. Big orange anime eyes, vivid orange hair, very crisp 2D lineart and simple cel shading, warm ivory/orange/dark brown palette. Compact square composition with all hair and books inside frame and plenty of transparent padding. Sticker-like contour but no opaque rectangle. No words, letters, logos, text or background. Genuine alpha transparency, not checkerboard. Original non-official fan-inspired illustration.
