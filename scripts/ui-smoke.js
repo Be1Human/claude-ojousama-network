@@ -40,12 +40,12 @@ try{
     try{
       if(reset){store.db.prepare('DELETE FROM observations WHERE source=?').run(fixtureSource);store.db.prepare('DELETE FROM checks WHERE batch=?').run(fixtureSource);}
       for(const row of rows){store.record(row);if(row.route==='cli/api')store.check({time:row.time,batch:fixtureSource,route:'cli',target:'api',kind:'target',interval:cadence,ok:true});}
-      return String(store.db.prepare("SELECT MAX(id) id FROM observations WHERE route='cli/api'").get().id);
+      const last=store.db.prepare("SELECT id,time FROM observations WHERE route='cli/api' ORDER BY id DESC LIMIT 1").get();return{id:String(last.id),time:String(last.time)};
     }finally{store.close();}
   }
   async function refreshFixture(id){
     await page.locator('#sample').click();
-    await page.waitForFunction(expected=>document.getElementById('hero-ip').dataset.observationId===expected,id);
+    await page.waitForFunction(expected=>document.getElementById('hero-ip').dataset.observationId===expected.id&&document.getElementById('hero-ip').dataset.observedAt===expected.time,id);
     await page.waitForFunction(()=>!document.getElementById('sample').disabled);
   }
   const expectStopped=async expected=>{assert.equal(await status(),expected);assert.equal(await duration.textContent(),'00:00:00');};
