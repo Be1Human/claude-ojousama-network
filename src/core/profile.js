@@ -66,7 +66,7 @@ export function createProfile(env = {}, source = '应用启动环境 + Claude �
     proxy: normalized, noProxy, error, provider, apiOrigin, customApi, source,
     route(url) { if (error) throw new Error('PROFILE_INVALID'); return bypassProxy(url, noProxy) ? '' : normalized; },
     public: { source, proxy: redactProxy(normalized || proxy), proxyKey: key || '无', noProxy,
-      provider, apiOrigin, customApi, error, warnings, hasCredentials: !!(normalized && new URL(normalized).username) },
+      provider, apiOrigin, customApi, error, warnings, targetRoutes: Object.fromEntries(Object.entries({ api: apiOrigin, auth: 'https://claude.ai', echo: 'https://api.ipify.org' }).map(([name,url]) => [name,error?'invalid':normalized&&!bypassProxy(url,noProxy)?'proxy':'direct'])), hasCredentials: !!(normalized && new URL(normalized).username) },
   };
 }
 export async function readNetworkSettings(home, workspace = '', platform = process.platform, env = process.env) {

@@ -17,7 +17,7 @@
       <div class="hero-data"><article class="card ip-card"><div class="card-heading"><h2><span class="terminal">›_</span>出口观测</h2><div class="actions"><button class="primary" id="sample">▶ 立即检测</button><button id="pause">Ⅱ 暂停</button></div></div>
         <label class="route-select"><span>观察路径</span><select id="hero-route"><option value="cli/api">模型域名 · CLI 路径</option><option value="cli/auth">认证域名 · CLI 路径</option><option value="browser/auth">认证域名 · 系统浏览器近似</option><option value="cli/echo">CLI 第三方回显 · IPv4</option><option value="system/echo">系统路由回显 · IPv4</option></select></label>
         <div class="ip-line" id="hero-ip">等待首次观测</div><div class="location"><span class="pin">●</span><span id="hero-location">获得有效 IP 后查询归属地</span><span id="hero-status" class="badge">等待数据</span></div>
-        <div class="flow"><span>▣ 终端环境</span><b>→</b><span id="proxy-chip">路由待确认</span><b>→</b><span>◎ 目标探测</span></div>
+        <div class="flow"><span id="flow-origin">▣ 终端环境</span><b>→</b><span id="proxy-chip">路由待确认</span><b>→</b><span>◎ 目标探测</span></div>
         <p class="evidence" id="hero-evidence">本机开始记录后才能查看历史。</p><div class="card-bottom"><span id="last-seen">—</span><span id="geo-source">GeoIP 仅为数据库估计</span></div>
       </article>
       <div class="stats"><article class="card stat"><div class="stat-icon green">▥</div><div><h3>HTTPS 成功率</h3><strong id="rate">—</strong><small>CLI · 两个公共目标</small></div></article><article class="card stat"><div class="stat-icon orange">◴</div><div><h3>响应 P95</h3><strong id="p95">—</strong><small>含连接与 TLS 耗时</small></div></article><article class="card stat"><div class="stat-icon blue">⇄</div><div><h3>API 出口变化</h3><strong id="changes">—</strong><small id="sample-count">等待记录</small></div></article></div>

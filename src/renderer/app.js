@@ -24,7 +24,11 @@ function render(){
   const s=state.status||{};const paused=config?.paused??s.paused;
   $('runtime').textContent=s.demo?'演示模式':paused?'已暂停':s.suspended?'已休眠':s.busy?'检测中…':'后台观测中';$('runtime').className='badge '+(paused?'wait':'good');
   $('pause').textContent=paused?'▶ 继续':'Ⅱ 暂停';$('sample').disabled=!!s.busy;
-  const r=latest($('hero-route').value),ok=r?.status==='ok';
+  const selectedRoute=$('hero-route').value;
+  const targetKey=selectedRoute.split('/')[1],effective=config?.profile?.targetRoutes?.[targetKey];
+  $('flow-origin').textContent=selectedRoute.startsWith('browser/')?'▣ 独立浏览器':selectedRoute.startsWith('system/')?'▣ 系统网络':'▣ 终端环境';
+  $('proxy-chip').textContent=selectedRoute.startsWith('browser/')?'◇ 系统自动代理':selectedRoute.startsWith('system/')?'◇ OS 路由 / TUN':effective==='invalid'?'⚠ 配置无效':effective==='proxy'?'◇ 显式代理':'◇ 无显式代理 / 已绕过';
+  const r=latest(selectedRoute),ok=r?.status==='ok';
   $('hero-ip').textContent=r?address(r.ip):'等待首次观测';$('hero-ip').classList.toggle('long',!r?.ip||r.ip.includes(':'));
   $('hero-location').textContent=ok?geo(r.geo):(r?.error||'开始记录后，这里会显示出口信息');
   const stale=r && Date.now()-r.time>Math.max((config?.interval||30)*3500,120000);
