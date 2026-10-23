@@ -50,5 +50,8 @@ port.on('message',async ({data:m})=>{
     else if(m.type==='import') data=store.importLegacy(m.file);
     else if(m.type==='quit') {generation++;clearTimeout(timer);store?.event('quit');store?.close();process.exit(0);}
     if(m.id)send({type:'reply',id:m.id,data});
-  }catch{if(m.id)send({type:'reply',id:m.id,error:'操作未完成；原数据已保留。'});}
+  }catch{if(m.type==='init'){send({type:'fatal'});process.exit(1);}if(m.id)send({type:'reply',id:m.id,error:'操作未完成；原数据已保留。'});}
 });
+
+// Imports and the message handler must be ready before the parent sends init.
+send({type:'listening'});

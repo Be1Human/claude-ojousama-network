@@ -74,9 +74,10 @@ async function startWorker(){
   const env=Object.fromEntries(['PATH','SystemRoot','WINDIR','TEMP','TMP','HOME','USERPROFILE','LANG'].filter(k=>process.env[k]).map(k=>[k,process.env[k]]));
   const child=utilityProcess.fork(path.join(root,'src','worker.js'),[],{serviceName:'Claude Ojou Network Observer',env,stdio:'pipe'});worker=child;
   child.stderr.on('data',buffer=>{if(demo)console.error('Demo worker:',buffer.toString());});child.stdout.on('data',()=>{});
-  child.on('spawn',()=>child.postMessage({type:'init',directory,legacy:demo?'':legacy,config}));
   child.on('message',async m=>{
-    if(m.type==='ready'){workerReady=true;lastError=startupWarning;publish();}
+    if(m.type==='listening'){child.postMessage({type:'init',directory,legacy:demo?'':legacy,config});}
+    else if(m.type==='fatal'){lastError='后台数据库初始化失败，正在尝试恢复。';publish();}
+    else if(m.type==='ready'){workerReady=true;lastError=startupWarning;publish();}
     else if(m.type==='snapshot'){lastSnapshot=m.data;publish();}
     else if(m.type==='browser-probe'){const data=await browserProbe();if(worker===child)child.postMessage({type:'browser-result',id:m.id,data});}
     else if(m.type==='reply'){const p=pending.get(m.id);if(p){clearTimeout(p.timer);pending.delete(m.id);m.error?p.reject(new Error(m.error)):p.resolve(m.data);}}
