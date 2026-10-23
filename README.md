@@ -84,6 +84,8 @@ npm run build:mac # 当前 Mac arm64
 npm run build:win # Windows x64，建议在 Windows / CI 构建
 ```
 
+v0.1.0 的 [21 项测试与三平台构建](https://github.com/Be1Human/claude-ojousama-network/actions/runs/39969610010)、[发布文件完整性验证](https://github.com/Be1Human/claude-ojousama-network/actions/runs/39972177947)均已通过；另可查看[Windows 最终包演示截图](docs/assets/windows-demo.png)。
+
 [GitHub Actions](https://github.com/Be1Human/claude-ojousama-network/actions) 分别在 macOS arm64、macOS Intel 和 Windows x64 上执行逻辑测试、源应用 UI 测试、安装包构建、打包后应用 UI 测试。CI 自动运行不等于所有真实 Windows 设备、重启启动项、整夜监测或休眠恢复均已人工验收。
 
 架构参考 codebuddy-mem 的托盘、单实例、后台工作进程和关闭隐藏模式，自主实现；没有复制其源代码。Electron 界面采用 contextIsolation / sandbox / CSP，网络与 SQLite 在独立 utilityProcess，前端没有 Node 权限或任意 URL 请求能力。单轮请求有超时、响应大小上限、无重叠轮询；工作进程失败最多自动重启三次。
