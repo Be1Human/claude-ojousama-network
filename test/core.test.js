@@ -9,7 +9,7 @@ import { pickNetworkEnv, createProfile, bypassProxy, readNetworkSettings, redact
 import { Store, incidents, percentile, csvCell } from '../src/core/store.js';
 import { parseTrace, publicIP, request, echo, geoLookup } from '../src/core/network.js';
 import { collect } from '../src/core/collector.js';
-function fixture(t) {const dir=mkdtempSync(path.join(tmpdir(),'ojou-test-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const store=new Store(path.join(dir,'test.sqlite3'));t.after(()=>store.close());return{dir,store};}
+function fixture(t) {const dir=mkdtempSync(path.join(tmpdir(),'ojou-test-'));const store=new Store(path.join(dir,'test.sqlite3'));t.after(()=>{store.close();rmSync(dir,{recursive:true,force:true});});return{dir,store};}
 const row=(ip,status='ok',route='cli/api',family=4)=>({route,label:'API',family,ip,status,source:'fixture',evidence:'edge-trace'});
 test('only allowlisted network environment is captured; tokens are excluded',()=>{assert.deepEqual(pickNetworkEnv({HTTPS_PROXY:'http://localhost:1',ANTHROPIC_API_KEY:'secret',CLAUDE_CODE_OAUTH_TOKEN:'secret',RANDOM:'x'}),{HTTPS_PROXY:'http://localhost:1'});});
 test('official proxy precedence; reject SOCKS without silent direct fallback',()=>{const p=createProfile({HTTPS_PROXY:'http://upper:1',https_proxy:'http://lower:2',HTTP_PROXY:'http://fallback:3'});assert.equal(p.route('https://claude.ai'),'http://lower:2/');assert.match(createProfile({HTTPS_PROXY:'socks5://localhost:1'}).error,/SOCKS/);assert.throws(()=>createProfile({HTTPS_PROXY:'bad'}).route('https://claude.ai'));});
