@@ -89,12 +89,12 @@ jobs:
         shell: bash
         run: |
           gh release upload "$RELEASE_TAG" release-assets/* --clobber
-          gh release view "$RELEASE_TAG" --json assets,isDraft > uploaded.json
+          gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" > uploaded.json
           python3 - <<'PY'
           import hashlib, json, pathlib
           root = pathlib.Path('release-assets')
           release = json.load(open('uploaded.json'))
-          assert release['isDraft'] is True
+          assert release['draft'] is True
           remote = {a['name']: a for a in release['assets']}
           assert set(remote) == {p.name for p in root.iterdir()}
           for path in root.iterdir():
