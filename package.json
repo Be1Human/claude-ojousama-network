@@ -1,6 +1,6 @@
 {
   "name": "claude-ojousama-network",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "大小姐的网络手账 — a local-first Claude Code network observatory",
   "author": "Be1Human",
   "license": "MIT",
