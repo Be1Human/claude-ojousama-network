@@ -11,7 +11,7 @@ app.setPath('userData',demo?path.join(os.tmpdir(),`ClaudeOjouDemo-${process.pid}
 const directory=app.getPath('userData'),configPath=path.join(directory,'settings.json');
 mkdirSync(directory,{recursive:true,mode:0o700});
 const defaults={interval:30,ipv6:true,paused:false,mode:'auto',notifications:false,workspace:'',manualProxy:'',capturedEnv:null,capturedAt:'',source:'应用启动环境'};
-let settings={...defaults},win,tray,worker,quitting=false,lastSnapshot=null,profileInfo={},workerReady=false,restarts=0,lastError='',startupWarning='',seq=0;
+let settings={...defaults},win,tray,worker,quitting=false,lastSnapshot=null,profileInfo={},workerReady=false,restarts=0,lastError='',startupWarning='',seq=0,startingWorker=false,restartTimer;
 const pending=new Map();
 const legacy=process.platform==='darwin'?path.join(os.homedir(),'Library','Application Support','NetworkWatch','ip-history.sqlite3'):'';
 if(!app.requestSingleInstanceLock({capture:captureFlag?pickNetworkEnv(process.env):null,capturedAt:new Date().toISOString()})){app.quit();}else{
@@ -69,24 +69,25 @@ async function browserProbe(){
   finally{clearTimeout(timer);}
 }
 async function startWorker(){
-  if(quitting)return;workerReady=false;
+  if(quitting||startingWorker||workerReady)return;startingWorker=true;clearTimeout(restartTimer);workerReady=false;
   const config=await resolveProfile();
   const env=Object.fromEntries(['PATH','SystemRoot','WINDIR','TEMP','TMP','HOME','USERPROFILE','LANG'].filter(k=>process.env[k]).map(k=>[k,process.env[k]]));
   const child=utilityProcess.fork(path.join(root,'src','worker.js'),[],{serviceName:'Claude Ojou Network Observer',env,stdio:'pipe'});worker=child;
   child.stderr.on('data',buffer=>{if(demo)console.error('Demo worker:',buffer.toString());});child.stdout.on('data',()=>{});
   child.on('message',async m=>{
+    if(worker!==child)return;
     if(m.type==='listening'){child.postMessage({type:'init',directory,legacy:demo?'':legacy,config});}
     else if(m.type==='fatal'){lastError='后台数据库初始化失败，正在尝试恢复。';publish();}
-    else if(m.type==='ready'){workerReady=true;lastError=startupWarning;publish();}
+    else if(m.type==='ready'){workerReady=true;startingWorker=false;lastError=startupWarning;publish();}
     else if(m.type==='snapshot'){lastSnapshot=m.data;publish();}
     else if(m.type==='browser-probe'){const data=await browserProbe();if(worker===child)child.postMessage({type:'browser-result',id:m.id,data});}
     else if(m.type==='reply'){const p=pending.get(m.id);if(p){clearTimeout(p.timer);pending.delete(m.id);m.error?p.reject(new Error(m.error)):p.resolve(m.data);}}
     else if(m.type==='sample'&&m.changes.length&&settings.notifications&&Notification.isSupported()){new Notification({title:'网络手账 · 出口发生变化',body:`${m.changes.length} 条观测路径出现 IP 变化。打开手账查看详细记录。`}).show();}
   });
   child.on('exit',()=>{
-    if(worker!==child)return;workerReady=false;
+    if(worker!==child)return;workerReady=false;startingWorker=false;
     for(const p of pending.values()){clearTimeout(p.timer);p.reject(new Error('后台进程已重启'));}pending.clear();
-    if(!quitting){lastError='采样进程已停止，正在尝试恢复。';publish();if(restarts++<3)setTimeout(startWorker,Math.min(1000*2**restarts,15000));else{lastError='后台重试已停止；请点击立即检测重启。';publish();}}
+    if(!quitting){lastError='采样进程已停止，正在尝试恢复。';publish();if(restarts++<3)restartTimer=setTimeout(startWorker,Math.min(1000*2**restarts,15000));else{lastError='后台重试已停止；请点击立即检测重启。';publish();}}
   });
 }
 function show(){if(!win)return;if(process.platform==='darwin')app.dock?.show();win.show();win.focus();}
