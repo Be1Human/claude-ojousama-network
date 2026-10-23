@@ -85,7 +85,7 @@ npm run build:mac # 当前 Mac arm64
 npm run build:win # Windows x64，建议在 Windows / CI 构建
 ```
 
-v0.1.1 的 [21 项测试与三平台构建](https://github.com/Be1Human/claude-ojousama-network/actions/runs/40029382275)、[发布文件完整性验证](https://github.com/Be1Human/claude-ojousama-network/actions/runs/40029816641)均已通过；另可查看[Windows 中国出口警告演示截图](docs/assets/china-warning-windows-demo.png)。
+v0.1.2 的 [21 项测试与三平台构建](https://github.com/Be1Human/claude-ojousama-network/actions/runs/40030521063)、[发布文件完整性验证](https://github.com/Be1Human/claude-ojousama-network/actions/runs/40031285545)均已通过；另可查看[Windows 中国香港出口警告演示截图](docs/assets/hong-kong-warning-windows-demo.png)。
 
 [GitHub Actions](https://github.com/Be1Human/claude-ojousama-network/actions) 分别在 macOS arm64、macOS Intel 和 Windows x64 上执行逻辑测试、源应用 UI 测试、安装包构建、打包后应用 UI 测试。CI 自动运行不等于所有真实 Windows 设备、重启启动项、整夜监测或休眠恢复均已人工验收。
 
