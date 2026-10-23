@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, existsSync, chmodSync, openSync, writeSync, closeSync } from 'node:fs';
 import path from 'node:path';
+import { emptyStability, advanceStability, stabilityView, STABILITY_VERSION } from './stability.js';
 
 export function percentile(values, ratio) {
   if (!values.length) return null;
@@ -41,6 +42,7 @@ export class Store {
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS observations(id INTEGER PRIMARY KEY, time INTEGER NOT NULL, route TEXT NOT NULL, label TEXT NOT NULL, family INTEGER, ip TEXT, status TEXT, event TEXT, previous_ip TEXT, source TEXT, evidence TEXT, geo TEXT, ms REAL, error TEXT, legacy_key TEXT UNIQUE);
       CREATE INDEX IF NOT EXISTS observations_series ON observations(route,family,id);
+      CREATE INDEX IF NOT EXISTS observations_route_id ON observations(route,id);
       CREATE INDEX IF NOT EXISTS observations_time ON observations(time);
       CREATE TABLE IF NOT EXISTS checks(id INTEGER PRIMARY KEY,time INTEGER, batch TEXT, route TEXT, target TEXT, kind TEXT, ok INTEGER, http INTEGER, ms REAL, error TEXT, interval INTEGER, legacy_key TEXT UNIQUE);
       CREATE INDEX IF NOT EXISTS checks_time ON checks(time,route);
@@ -49,13 +51,17 @@ export class Store {
       CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT);`);
   }
   close() { this.db.close(); }
-  event(event, detail = '', time = Date.now()) { this.db.prepare('INSERT INTO events(time,event,detail) VALUES(?,?,?)').run(time, event, detail); }
+  event(event, detail = '', time = Date.now()) { this.db.prepare('INSERT INTO events(time,event,detail) VALUES(?,?,?)').run(time, event, detail); this.stabilityDirty = true; }
   record(row) {
-    const previous = this.db.prepare("SELECT ip,time FROM observations WHERE route=? AND family=? AND status='ok' ORDER BY id DESC LIMIT 1").get(row.route, row.family);
+    const singleTarget = ['cli/api','cli/auth','browser/auth'].includes(row.route);
+    const previous = singleTarget
+      ? this.db.prepare("SELECT ip,time FROM observations WHERE route=? AND status='ok' ORDER BY id DESC LIMIT 1").get(row.route)
+      : this.db.prepare("SELECT ip,time FROM observations WHERE route=? AND family=? AND status='ok' ORDER BY id DESC LIMIT 1").get(row.route, row.family);
     const event = row.status === 'ok' ? (!previous ? 'first' : previous.ip === row.ip ? 'stable' : 'change') : 'error';
     const v = { time: Date.now(), geo: {}, error: '', ms: null, evidence: 'echo', ...row, event, previous_ip: event === 'change' ? previous.ip : '' };
     this.db.prepare('INSERT INTO observations(time,route,label,family,ip,status,event,previous_ip,source,evidence,geo,ms,error,legacy_key) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
       .run(v.time,v.route,v.label,v.family,v.ip || '',v.status,v.event,v.previous_ip,v.source || '',v.evidence,JSON.stringify(v.geo),v.ms ?? v.totalMs ?? null,v.error || '',v.legacy_key || null);
+    if (row.route === 'cli/api') this.stabilityDirty = true;
     return v;
   }
   check(row) {
@@ -73,7 +79,32 @@ export class Store {
     const rows = this.db.prepare(`SELECT * FROM observations WHERE ${clauses.join(' AND ')} ORDER BY id DESC LIMIT 201`).all(...args);
     return { rows: rows.slice(0,200).map(obs), next: rows.length > 200 ? rows[199].id : null };
   }
-  snapshot(hours = 24) {
+  stability(now = Date.now(), runtime = {}) {
+    const dataVersion = this.db.prepare('PRAGMA data_version').get().data_version;
+    const externalChange = this.stabilityDataVersion != null && this.stabilityDataVersion !== dataVersion;
+    if (!this.stabilityCheckpoint || this.stabilityDirty || externalChange) {
+      let checkpoint = externalChange ? emptyStability() : this.stabilityCheckpoint;
+      if (!checkpoint) {
+        try {
+          const cached = JSON.parse(this.db.prepare("SELECT value FROM meta WHERE key='non-cn-stability-v1'").get()?.value || 'null');
+          if (cached?.version === STABILITY_VERSION && Number.isInteger(cached.lastObservationId) && Number.isInteger(cached.lastEventId) && Array.isArray(cached.recent)) checkpoint = cached;
+        } catch { /* Rebuild the derived checkpoint from original records. */ }
+      }
+      checkpoint ||= emptyStability();
+      const latest = this.db.prepare("SELECT id FROM observations WHERE route='cli/api' ORDER BY id DESC LIMIT 1").get()?.id || 0;
+      const latestEvent = this.db.prepare('SELECT MAX(id) id FROM events').get().id || 0;
+      if (checkpoint.lastObservationId > latest || checkpoint.lastEventId > latestEvent) checkpoint = emptyStability();
+      const rows = this.db.prepare(`SELECT o.*,COALESCE((SELECT c.interval FROM checks c WHERE c.time=o.time
+        AND c.route='cli' AND c.kind='target' AND c.target='api' ORDER BY c.id DESC LIMIT 1),30) cadence
+        FROM observations o WHERE o.route='cli/api' AND o.id>? ORDER BY o.id`).all(checkpoint.lastObservationId).map(obs);
+      const events = this.db.prepare('SELECT id,time,event FROM events WHERE id>? ORDER BY id').all(checkpoint.lastEventId);
+      this.stabilityCheckpoint = advanceStability(checkpoint, rows, events);
+      this.db.prepare("INSERT OR REPLACE INTO meta(key,value) VALUES('non-cn-stability-v1',?)").run(JSON.stringify(this.stabilityCheckpoint));
+      this.stabilityDirty = false; this.stabilityDataVersion = dataVersion;
+    }
+    return stabilityView(this.stabilityCheckpoint, now, runtime);
+  }
+  snapshot(hours = 24, runtime = {}) {
     hours = [1,6,24,168,720].includes(Number(hours)) ? Number(hours) : 24;
     const since = Date.now()-hours*3600000;
     const current = this.db.prepare('SELECT o.* FROM observations o JOIN (SELECT route,family,MAX(id) id FROM observations GROUP BY route,family) t ON o.id=t.id ORDER BY route,family').all().map(obs);
@@ -92,7 +123,8 @@ export class Store {
     const analysisRows = this.db.prepare("SELECT time,batch,route,ok,interval FROM checks WHERE time>=? AND kind='stability' ORDER BY time").all(since);
     const events = this.db.prepare('SELECT * FROM events ORDER BY id DESC LIMIT 100').all();
     const allChanges = this.db.prepare("SELECT route,COUNT(*) count FROM observations WHERE time>=? AND event='change' GROUP BY route").all(since);
-    return { now: Date.now(), hours, current, summaries, count, changes, allChanges, chart, bucket, recent, targets, incidents: incidents(analysisRows).slice(0,100), events, routes: [...new Map(current.map(r=>[r.route,{id:r.route,label:r.label}])).values()] };
+    const now = Date.now();
+    return { now, hours, stability: this.stability(now,runtime), current, summaries, count, changes, allChanges, chart, bucket, recent, targets, incidents: incidents(analysisRows).slice(0,100), events, routes: [...new Map(current.map(r=>[r.route,{id:r.route,label:r.label}])).values()] };
   }
   export(directory) {
     const stamp = new Date().toISOString().replaceAll(':','-').slice(0,19);

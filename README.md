@@ -5,21 +5,29 @@
 
 **今天也要见到大小姐。把网络的来去，认真记下来。**
 
-Claude Code 网络路径观察 · IP 漂移历史 · macOS / Windows 托盘常驻
+非中国 / 非香港出口连续计时 · IP 漂移历史 · macOS / Windows 托盘常驻
 
 [下载安装](https://github.com/Be1Human/claude-ojousama-network/releases/latest) · [构建与测试](https://github.com/Be1Human/claude-ojousama-network/actions) · [设计与验证](docs/设计与验证.html) · [English](#english)
 
-<img src="docs/assets/application-demo.png" alt="实际应用截图：原创橙发大小姐、IP 记录和稳定性曲线。截图全部为演示数据。">
+<img src="docs/assets/application-demo.png" alt="实际应用截图：原创橙发大小姐、非中国出口连续时长与重置记录。截图全部为演示数据。">
 
 *实际应用截图，全部为演示数据。原创同人风格，非 Anthropic 官方产品。*
 </div>
 
-## 能观察什么
+## 核心指标：非中国出口连续稳定时长
+
+总览只看 **Claude Code 模型服务使用出口**：明确归属不在中国（CN）或中国香港（HK），并且持续观测为同一 IP，才累计 `时:分:秒`。超过一天显示天数；换到另一个符合条件的 IP，从新观测时刻重新开始。
+
+中国 / 香港、归属未知、探测失败、暂停、休眠、退出或采样缺口都会中断；恢复后重新确认并计时。上一段只结算到最后一次成功确认，未观测时间不会算成已确认时长。窗口关闭到托盘仍在监测；重新打开窗口或改变图表时段不会清零。数据从本地完整历史与检查点恢复。
+
+总览保留时长、当前出口、上一段时长和重置原因。其他检测在「出口对照」；公共 HTTPS 成功率与 P95 收进辅助诊断，不参与此计时。历史里的「IP 未变」只说明两次地址相同。
+
+## 还能观察什么
 
 - **Claude 相关路径**：按 Claude Code 的 HTTP(S) 代理变量访问 `api.anthropic.com` / `claude.ai` 的公开边缘 trace；返回有效 IP 时记录来源、时间与变化。另用独立 Chromium 会话观察系统浏览器近似路径。
-- **中国 / 中国香港出口警告**：检测到中国（CN）或中国香港（HK）归属时，顶部提示具体检测项目及 IPv4/IPv6，出口与路径卡片显示对应地区的红色警告；历史保留“当时为中国出口”或“当时为中国香港出口”标记。过期结果会注明过期，其他地区、未知归属和探测失败不误报。归属地为第三方数据库估计。
+- **中国 / 中国香港出口警告**：检测到中国（CN）或中国香港（HK）归属时，总览对主出口停止计时并警告；出口对照提示具体检测项目及 IPv4/IPv6，卡片显示对应地区的红色警告；历史保留“当时为中国出口”或“当时为中国香港出口”标记。过期结果会注明过期，其他地区、未知归属和探测失败不误报。归属地为第三方数据库估计。
 - **IP 历史**：分别记录 IPv4 / IPv6、系统路由、CLI 回显、目标域名；成功、失败和变化均保留。GeoIP 国家、城市、ASN、运营商、查询来源与时间可追溯。
-- **网络稳定性**：Cloudflare / GitHub 两个公共 HTTPS 目标的成功率、响应耗时、P95、同时失败事件；休眠与采样间隔单独记录。
+- **辅助连接诊断**：Cloudflare / GitHub 两个公共 HTTPS 目标的成功率、响应耗时、P95、同时失败事件；休眠与采样间隔单独记录。
 - **日常后台使用**：托盘常驻、关闭窗口隐藏、暂停/继续、立即检测、可选开机启动、变化通知、筛选和全部 CSV 导出。
 - **数据留在本机**：SQLite 历史；代理认证信息通过 macOS Keychain / Windows DPAPI 支持的 Electron safeStorage 加密保存。没有本项目的遥测或上传服务器。公共探测与 GeoIP 服务仍会收到相应请求。
 
@@ -39,7 +47,7 @@ Claude Code 网络路径观察 · IP 漂移历史 · macOS / Windows 托盘常�
 
 ### 尽量贴近你启动 Claude Code 的环境
 
-1. 打开「Claude 路径」，点击「复制终端采集命令」。
+1. 打开「出口对照」，点击「复制终端采集命令」。
 2. 将命令粘贴到**准备运行 Claude Code 的同一个终端**并执行。应用会接收白名单网络变量，不接收 API Key、OAuth Token 或完整进程环境。
 3. 如有项目级 `.claude/settings.json` / `settings.local.json`，点击「选择 Claude 项目」。
 4. 查看代理来源和提示，再立即检测。已有 Claude Code 进程可能保留旧启动环境；在 Claude Code 的 `/status` 中自行核对 Proxy。
@@ -52,6 +60,7 @@ Claude Code 网络路径观察 · IP 漂移历史 · macOS / Windows 托盘常�
 
 | 显示内容 | 能证明的范围 |
 | --- | --- |
+| 连续稳定时长 | 指定模型服务候选出口连续采样满足非 CN/HK 且 IP 未变；不是无间断抓包，也不是账号安全评分 |
 | 域名边缘回显 | 此次无凭据探测到该域名的 Cloudflare 边缘看到的源 IP；端点随时可能停止提供该信息 |
 | 系统浏览器近似 | 独立 Chromium 会话遵循系统代理的观测；不代表外部浏览器的插件、独立代理或既有会话 |
 | 第三方 IP 回显 | 请求 ipify / icanhazip 的出口；按域名、进程或协议分流时不一定等于 Claude |
@@ -101,7 +110,7 @@ v0.1.2 的 [21 项测试与三平台构建](https://github.com/Be1Human/claude-o
 
 ## English
 
-**Claude Ojou Network** is an independent, anime-themed, local-first network diary for Claude Code users. It records public IPv4/IPv6 history, GeoIP provenance, HTTPS stability and domain-edge trace observations. A tray process keeps observing after the window closes. No login credentials are collected and no model calls are made. Public IP and GeoIP providers receive the diagnostic requests; there is no project telemetry backend.
+**Claude Ojou Network** is an independent, anime-themed, local-first network diary for Claude Code users. Its main metric tracks continuous sampled stability of the model-service egress only while its GeoIP is known and outside CN/HK. A changed IP starts a new run; failed/unknown/excluded samples, pauses, sleep and gaps interrupt it. Previous confirmed runs and reset reasons are retained across UI windows. It also records public IPv4/IPv6 history, GeoIP provenance, auxiliary HTTPS diagnostics and domain-edge trace observations. A tray process keeps observing after the window closes. No login credentials are collected and no model calls are made. Public IP and GeoIP providers receive the diagnostic requests; there is no project telemetry backend.
 
 Target-domain edge traces are observations of diagnostic requests, **not proof of the IP recorded by Claude authentication or API backends**. The external login browser and CLI may follow different routes. The application offers no account-risk score or ban-prevention guarantee.
 

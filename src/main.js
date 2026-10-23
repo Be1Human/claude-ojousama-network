@@ -19,7 +19,13 @@ if(!app.requestSingleInstanceLock({capture:captureFlag?pickNetworkEnv(process.en
 app.on('second-instance',async(_event,_args,_cwd,data)=>{if(data?.capture){settings.capturedEnv=pickNetworkEnv(data.capture);settings.capturedAt=data.capturedAt;await persist();worker?.postMessage({type:'configure',config:await resolveProfile()});publish();}show();});
 app.on('activate',()=>show());
 app.on('window-all-closed',()=>{});
-app.on('before-quit',()=>{quitting=true;worker?.postMessage({type:'quit'});});
+app.on('before-quit',event=>{
+  if(quitting)return;
+  event.preventDefault();quitting=true;
+  if(!worker){app.exit();return;}
+  const child=worker,timer=setTimeout(()=>{child.kill();app.exit();},1500);
+  child.once('exit',()=>{clearTimeout(timer);app.exit();});child.postMessage({type:'quit'});
+});
 app.on('will-quit',()=>{worker?.kill();for(const p of pending.values()){clearTimeout(p.timer);p.reject(new Error('应用退出'));}});
 await app.whenReady();
 loadSettings();
@@ -40,8 +46,8 @@ function persist(){
   renameSync(temp,configPath);
 }
 async function resolveProfile(){
-  const inherited=settings.capturedEnv||pickNetworkEnv(process.env);
-  const read=await readNetworkSettings(os.homedir(),settings.workspace,process.platform,{...process.env,...inherited});
+  const inherited=demo?{}:settings.capturedEnv||pickNetworkEnv(process.env);
+  const read=demo?{env:{},sources:[],warnings:[]}:await readNetworkSettings(os.homedir(),settings.workspace,process.platform,{...process.env,...inherited});
   let env={...inherited,...read.env};
   if(settings.mode!=='auto'){
     for(const k of ['https_proxy','HTTPS_PROXY','http_proxy','HTTP_PROXY','all_proxy','ALL_PROXY'])delete env[k];
@@ -76,16 +82,17 @@ async function startWorker(){
   child.stderr.on('data',buffer=>{if(demo)console.error('Demo worker:',buffer.toString());});child.stdout.on('data',()=>{});
   child.on('message',async m=>{
     if(worker!==child)return;
-    if(m.type==='listening'){child.postMessage({type:'init',directory,legacy:demo?'':legacy,config});}
+    if(m.type==='listening'){child.postMessage({type:'init',directory,legacy:demo?'':legacy,config,observerRestart:!!lastSnapshot});}
     else if(m.type==='fatal'){lastError='后台数据库初始化失败，正在尝试恢复。';publish();}
     else if(m.type==='ready'){workerReady=true;startingWorker=false;lastError=startupWarning;publish();}
     else if(m.type==='snapshot'){lastSnapshot=m.data;publish();}
     else if(m.type==='browser-probe'){const data=await browserProbe();if(worker===child)child.postMessage({type:'browser-result',id:m.id,data});}
     else if(m.type==='reply'){const p=pending.get(m.id);if(p){clearTimeout(p.timer);pending.delete(m.id);m.error?p.reject(new Error(m.error)):p.resolve(m.data);}}
-    else if(m.type==='sample'&&m.changes.length&&settings.notifications&&Notification.isSupported()){new Notification({title:'网络手账 · 出口发生变化',body:`${m.changes.length} 条观测路径出现 IP 变化。打开手账查看详细记录。`}).show();}
+    else if(m.type==='sample'&&m.transition&&settings.notifications&&Notification.isSupported()){new Notification({title:'网络手账 · 连续稳定计时',body:m.transition}).show();}
   });
   child.on('exit',()=>{
     if(worker!==child)return;workerReady=false;startingWorker=false;
+    if(lastSnapshot?.stability){const v=lastSnapshot.stability;lastSnapshot={...lastSnapshot,stability:{...v,lastRun:v.since==null?v.lastRun:{since:v.since,endedAt:v.lastSeenAt,durationMs:v.confirmedMs,ip:v.ip,countryCode:v.countryCode,reason:'error'},status:'interrupted',reason:'error',reasonLabel:'后台进程中断',since:null,elapsedMs:0}};}
     for(const p of pending.values()){clearTimeout(p.timer);p.reject(new Error('后台进程已重启'));}pending.clear();
     if(!quitting){lastError='采样进程已停止，正在尝试恢复。';publish();if(restarts++<3)restartTimer=setTimeout(startWorker,Math.min(1000*2**restarts,15000));else{lastError='后台重试已停止；请点击立即检测重启。';publish();}}
   });
@@ -108,7 +115,7 @@ function handle(name,fn){ipcMain.handle(name,async(e,...args)=>{
   try{return await fn(...args);}catch(error){throw new Error(error.message?.includes('无法')||error.message?.includes('请')?error.message:'操作失败，数据已保留。');}
 });}
 handle('config',()=>publicConfig());handle('snapshot',h=>requestWorker('snapshot',{hours:h}));handle('history',q=>requestWorker('history',{query:q&&typeof q==='object'?q:{}}));
-handle('sample',async()=>{if(!workerReady){restarts=0;startWorker();return null;}return requestWorker('sample');});
+handle('sample',async()=>{if(settings.paused)throw new Error('请先继续检测。');if(!workerReady){restarts=0;startWorker();return null;}return requestWorker('sample');});
 handle('pause',async v=>{await setPaused(v);return publicConfig();});
 handle('settings',async v=>{
   const next={...settings};if([15,30,60,300].includes(v.interval))next.interval=v.interval;
